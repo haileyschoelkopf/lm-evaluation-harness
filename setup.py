@@ -22,7 +22,8 @@ install_requires = [
     "tqdm-multiprocess==0.0.11",
     "accelerate@git+https://github.com/huggingface/accelerate@main",
     "transformers@git+https://github.com/huggingface/transformers@main",
-    "promptsource@git+https://github.com/bigscience-workshop/promptsource@eval-hackathon",
+    #"promptsource@git+https://github.com/bigscience-workshop/promptsource@eval-hackathon", 
+    # install promptsource manually to ensure it's up-to-date with the correct branch
 ]
 dependency_links = []
 
