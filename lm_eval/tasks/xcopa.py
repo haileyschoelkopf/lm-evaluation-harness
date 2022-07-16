@@ -8,7 +8,13 @@ from lm_eval.api.task import PromptSourceTask
 
 
 _CITATION = """
-TODO: add
+@article{ponti2020xcopa,
+  title={{XCOPA: A} Multilingual Dataset for Causal Commonsense Reasoning},
+  author={Edoardo M. Ponti, Goran Glava�{s}, Olga Majewska, Qianchu Liu, Ivan Vuli'{c} and Anna Korhonen},
+  journal={arXiv preprint},
+  year={2020},
+  url={https://ducdauge.github.io/files/xcopa.pdf}
+}
 """
 
 class XCopaBase(PromptSourceTask):
