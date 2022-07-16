@@ -59,6 +59,7 @@ TASK_REGISTRY = {
     "copa": superglue.Copa,
     "multirc": superglue.MultiRC,
     "record": superglue.ReCoRD,
+    "superglue_rte": superglue.RTE,
     "wic": superglue.WordsInContext,
     "wsc": superglue.SGWinogradSchemaChallenge,
     # CoQA
@@ -127,6 +128,9 @@ TASK_REGISTRY = {
     # Flores101
     # Format: `gsarti/flores_101_{lang}`
     **flores_101.construct_tasks(),
+    # WMT
+    # Format: `wmt{year}_{lang1}_{lang2}`
+    **wmt.construct_tasks(),
     # BLiMP
     "blimp_adjunct_island": blimp.BlimpAdjunctIsland,
     "blimp_anaphor_gender_agreement": blimp.BlimpAnaphorGenderAgreement,
@@ -201,9 +205,6 @@ TASK_REGISTRY = {
     #######################################################
     # TODO: Not Yet Available in `promptsource/eval-hackathon`
     ########################################################
-    # WMT
-    # Format: `wmt{year}_{lang1}-{lang2}`
-    # **wmt.create_year_tasks(wmt.WMT14_TASKS),
     # GEM/mlsum
     # "mlsum_es": gem_mlsum.GEMMLSUMEs,
     # "mlsum_de": gem_mlsum.GEMMLSUMDe,
