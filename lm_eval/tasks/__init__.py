@@ -33,6 +33,7 @@ from . import superglue
 from . import tydiqa
 from . import wino_bias
 from . import wmt
+from . import xcopa
 from . import xquad
 
 
@@ -79,7 +80,7 @@ TASK_REGISTRY = {
     "hans": hans.HANS,
     # CNN Daily Mail
     "cnn_dailymail": cnn_dailymail.CnnDailyMail,
-    # GEM/xum
+    # GEM/xsum
     "gem_xsum": gem_xsum.GEMXSUM,
     "gem_xsum_challenge_sample": gem_xsum.GEMXSUMChallgeSample,
     "gem_xsum_challenge_test_backtranslation": gem_xsum.GEMXSUMChallgeTestBacktranslation,
@@ -198,6 +199,8 @@ TASK_REGISTRY = {
     # TyDi QA
     "tydiqa_primary": tydiqa.TyDiQAPrimaryClassification,
     "tydiqa_secondary": tydiqa.TyDiQAGoldPGeneration,
+    # XCOPA
+    **xcopa.construct_tasks(),
     #######################################################
     # TODO: Not Yet Available in `promptsource/eval-hackathon`
     ########################################################
