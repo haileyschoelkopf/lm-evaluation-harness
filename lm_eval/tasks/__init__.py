@@ -200,6 +200,7 @@ TASK_REGISTRY = {
     "tydiqa_primary": tydiqa.TyDiQAPrimaryClassification,
     "tydiqa_secondary": tydiqa.TyDiQAGoldPGeneration,
     # XCOPA
+    # Format: `xcopa_{lang}`
     **xcopa.construct_tasks(),
     #######################################################
     # TODO: Not Yet Available in `promptsource/eval-hackathon`
