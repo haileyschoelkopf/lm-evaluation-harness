@@ -20,6 +20,7 @@ from . import gem_webnlg
 from . import gem_wikilingua
 from . import gem_xsum
 from . import glue
+from . import gsm8k
 from . import hans
 from . import huff_post
 from . import jigsaw_unintended_bias
@@ -87,6 +88,8 @@ TASK_REGISTRY = {
     "gem_xsum_challenge_test_bfp_05": gem_xsum.GEMXSUMChallgeTestBFP05,
     "gem_xsum_challenge_test_nopunc": gem_xsum.GEMXSUMChallgeTestNopunc,
     "gem_xsum_challenge_test_covid": gem_xsum.GEMXSUMChallgeTestCovid,
+    # gsm8k
+    "gsm8k": gsm8k.GradeSchoolMath8K,
     # LAMA
     "lama-trex": lama.Trex,
     "lama-squad": lama.Squad,

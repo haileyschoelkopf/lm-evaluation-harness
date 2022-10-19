@@ -157,6 +157,7 @@ class HuggingFaceAutoLM(TokenLM):
             tokenizer=tokenizer,
         )
         self.tokenizer.model_max_length = self.max_length
+        self.tokenizer.eos_token_id = 0
 
         accelerate_kwargs = {}
         if use_accelerate:

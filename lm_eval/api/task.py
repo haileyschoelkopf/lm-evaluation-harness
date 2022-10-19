@@ -482,6 +482,8 @@ class PromptSourceTask(Task):
         if answer_choices_list:
             # If answer_choices_list, then this is a ranked choice prompt.
             # NOTE: In the future, target could be a list of strings.
+            target = [target]
+            print(target)
             assert isinstance(target, list) and len(target) == 1
             target = target[0].strip()
             target_idx = answer_choices_list.index(target)
