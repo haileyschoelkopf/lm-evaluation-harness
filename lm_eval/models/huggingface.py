@@ -13,9 +13,10 @@ _DeviceMapping = NewType("DeviceMapping", Mapping[str, Union[int, str, torch.dev
 
 
 def _get_accelerate_args(
-    max_memory_per_gpu: Optional[Union[int, str]],
-    max_cpu_memory: Optional[Union[int, str]],
-    offload_folder: Optional[str],
+    device_map_option: Optional[str] = "auto",
+    max_memory_per_gpu: Optional[Union[int, str]] = None,
+    max_cpu_memory: Optional[Union[int, str]] = None,
+    offload_folder: Optional[str] = "./offload",
 ) -> dict:
     """Returns the kwargs needed to apply `accelerate` in `AutoModel.from_pretrained`."""
     max_memory = {}
@@ -31,7 +32,7 @@ def _get_accelerate_args(
     args = {}
     if max_memory:
         args["max_memory"] = max_memory
-    args["device_map"] = "auto"
+    args["device_map"] = device_map_option
     args["offload_folder"] = offload_folder
     return args
 
@@ -51,7 +52,8 @@ def _get_dtype(
 
 
 class HuggingFaceAutoLM(TokenLM):
-
+    AUTO_CONFIG_CLASS: transformers.AutoConfig = transformers.AutoConfig
+    AUTO_TOKENIZER_CLASS: transformers.AutoTokenizer = transformers.AutoTokenizer
     AUTO_MODEL_CLASS: transformers.AutoModel = None
 
     # Default max sequence length setting for when no `max_length` is provided
@@ -67,7 +69,9 @@ class HuggingFaceAutoLM(TokenLM):
         batch_size: Optional[int] = 1,
         max_gen_toks: Optional[int] = 256,
         max_length: Optional[int] = None,
+        add_special_tokens: Optional[bool] = None,
         use_accelerate: Optional[bool] = False,
+        device_map_option: Optional[str] = "auto",
         max_memory_per_gpu: Optional[Union[int, str]] = None,
         max_cpu_memory: Optional[Union[int, str]] = None,
         offload_folder: Optional[str] = "./offload",
@@ -76,39 +80,79 @@ class HuggingFaceAutoLM(TokenLM):
     ):
         """Initializes a HuggingFace `AutoModel` and `AutoTokenizer` for evaluation.
 
-        :param use_accelerate:
-            If True, uses the `accelerate` library to load a large model across
-            multiple devices.
-        :param max_memory_per_gpu: Optional[Union[int, str]]
-            The maximum memory available for each GPU in bytes as `int` or in
-            the format f"{significand}{unit_symbol}" where {unit_symbol} is
-            any of ["GB", "MB", "GIB", "MIB"]. Refer to the `max_memory` arg in
-            the "Parameters for big model inference" section of the following docs:
-            https://huggingface.co/docs/transformers/v4.20.1/en/main_classes/model#large-model-loading
-        :param max_cpu_memory: Optional[Union[int, str]]
-            The maximum available CPU RAM in bytes as `int` or in the format
-            f"{significand}{unit_symbol}" where {unit_symbol} is any of
-            ["GB", "MB", "GIB", "MIB"]. Refer to the `max_memory` arg in the
-            "Parameters for big model inference" section of the following docs:
-            https://huggingface.co/docs/transformers/v4.20.1/en/main_classes/model#large-model-loading
-        :param offload_folder: Optional[str]
-            The folder to offload weights into if `device_map` contains any "disk" value.
-        :param dtype: Optional[Union[str, torch.dtype]]
-            Converts the model weights to `dtype`, if specified. Strings get
-            converted to `torch.dtype` objects (e.g. `float16` -> `torch.float16`).
-            Use `dtype="auto"` to derive the type from the model’s weights.
+        Args:
+            pretrained (str):
+                The HuggingFace Hub model ID name or the path to a pre-trained
+                model to load. This is effectively the `pretrained_model_name_or_path`
+                argument of `from_pretrained` in the HuggingFace `transformers` API.
+            add_special_tokens (bool, optional, defaults to True):
+                Whether to add special tokens to the input sequences. If `None`, the
+                default value will be set to `True` for seq2seq models (e.g. T5) and
+                `False` for causal models.
+
+                WARNING: Evaluating causal models with `add_special_tokens=True` is
+                currently __not__ supported.
+
+            > Large model loading `accelerate` arguments
+
+            use_accelerate (bool, optional, defaults to False):
+                If True, uses the `accelerate` library to load a large model across
+                multiple devices.
+            device_map_option (str, optional, defaults to "auto"):
+                The device map option to use when loading the model with
+                `accelerate`.
+                Options:
+                    "auto", "balanced", "balanced_low_0", "sequential"
+                See the `accelerate` docs for more details on these options:
+                https://huggingface.co/docs/accelerate/v0.12.0/en/usage_guides/big_modeling#designing-a-device-map
+            max_memory_per_gpu (Union[int, str], optional, defaults to None):
+                The maximum memory available for each GPU in bytes as `int` or in
+                the format f"{significand}{unit_symbol}" where {unit_symbol} is
+                any of ["GB", "MB", "GIB", "MIB"]. Refer to the `max_memory` arg in
+                the "Parameters for big model inference" section of the following
+                docs:
+                https://huggingface.co/docs/transformers/v4.20.1/en/main_classes/model#large-model-loading
+            max_cpu_memory (Union[int, str], optional, defaults to None):
+                The maximum available CPU RAM in bytes as `int` or in the format
+                f"{significand}{unit_symbol}" where {unit_symbol} is any of
+                ["GB", "MB", "GIB", "MIB"]. Refer to the `max_memory` arg in the
+                "Parameters for big model inference" section of the following docs:
+                https://huggingface.co/docs/transformers/v4.20.1/en/main_classes/model#large-model-loading
+            offload_folder (str, optional, defaults to "./offload"):
+                The folder to offload weights into if `device_map` contains any
+                "disk" value.
+            dtype (Union[str, torch.dtype], optional, defaults to None):):
+                Converts the model weights to `dtype`, if specified. Strings get
+                converted to `torch.dtype` objects (e.g. `float16` -> `torch.float16`).
+                Use `dtype="auto"` to derive the type from the model’s weights.
         """
         super().__init__()
 
         assert isinstance(pretrained, str)
         assert isinstance(device, str)
         assert isinstance(batch_size, int)
+        if (
+            add_special_tokens is not None
+            and self.AUTO_MODEL_CLASS is transformers.AutoModelForCausalLM
+        ):
+            # TODO: Support evaluating causal models with special tokens. Currently,
+            # this is not possible because the `_loglikelihood_tokens()` method for
+            # causal LMs makes a no-special-tokens assumption given that contexts
+            # and labels/continuations are tokenized separately without special
+            # tokens, concatenated, and then processed as inputs.
+            assert (
+                not add_special_tokens
+            ), "Evaluating causal models with `add_special_tokens=True` is currently not supported."
 
         self._batch_size = batch_size  # TODO: Adaptive batch size
         self._max_gen_toks = max_gen_toks
         self._max_length = max_length
-        self._config = transformers.AutoConfig.from_pretrained(pretrained)
+        self._config = self.AUTO_CONFIG_CLASS.from_pretrained(
+            pretrained,
+            revision=revision + ("/" + subfolder if subfolder is not None else ""),
+        )
 
+        self._add_special_tokens = add_special_tokens
         self.tokenizer = self._create_auto_tokenizer(
             pretrained=pretrained,
             revision=revision,
@@ -120,7 +164,10 @@ class HuggingFaceAutoLM(TokenLM):
         accelerate_kwargs = {}
         if use_accelerate:
             accelerate_kwargs = _get_accelerate_args(
-                max_memory_per_gpu, max_cpu_memory, offload_folder
+                device_map_option,
+                max_memory_per_gpu,
+                max_cpu_memory,
+                offload_folder,
             )
         self.model = self._create_auto_model(
             pretrained=pretrained,
@@ -172,13 +219,33 @@ class HuggingFaceAutoLM(TokenLM):
         tokenizer: Optional[str] = None,
     ) -> transformers.PreTrainedTokenizer:
         """Returns a pre-trained tokenizer from a pre-trained tokenizer configuration."""
-        tokenizer = transformers.AutoTokenizer.from_pretrained(
+        tokenizer = self.AUTO_TOKENIZER_CLASS.from_pretrained(
             pretrained if tokenizer is None else tokenizer,
-            revision=revision,
-            subfolder=subfolder,
+            revision=revision + ("/" + subfolder if subfolder is not None else ""),
         )
         tokenizer.pad_token = tokenizer.eos_token
         return tokenizer
+
+    @property
+    def add_special_tokens(self) -> bool:
+        """Whether to include special tokens in encoded text. This should be
+        determined by whether or not the model was trained with special tokens.
+
+        TODO: Remove these conditionals once HuggingFace supports a way to
+        check whether or not an arbitrary model was trained with special tokens.
+        """
+        if self._add_special_tokens is not None:
+            return self._add_special_tokens
+        elif self.AUTO_MODEL_CLASS is transformers.AutoModelForCausalLM:
+            return False
+        elif self.AUTO_MODEL_CLASS is transformers.AutoModelForSeq2SeqLM:
+            return True
+        else:
+            raise ValueError(
+                "Could not determine `add_special_tokens` value from the model "
+                "class. Set to `True` or `False` depending on whether the model "
+                "was pre-trained with special tokens."
+            )
 
     @property
     def eot_token(self) -> str:
@@ -225,11 +292,14 @@ class HuggingFaceAutoLM(TokenLM):
 
     def tok_encode(self, string: str) -> TokenSequence:
         # TODO: Merge `tok_encode_batch` here.
-        return self.tokenizer.encode(string, add_special_tokens=False)
+        return self.tokenizer.encode(string, add_special_tokens=self.add_special_tokens)
 
     def tok_encode_batch(self, strings: List[str]) -> TokenSequence:
         return self.tokenizer(
-            strings, padding=True, add_special_tokens=False, return_tensors="pt"
+            strings,
+            padding=True,
+            add_special_tokens=self.add_special_tokens,
+            return_tensors="pt",
         )
 
     def tok_decode(self, tokens: torch.LongTensor) -> List[str]:
@@ -268,24 +338,17 @@ class HuggingFaceAutoLM(TokenLM):
             else:
                 max_tokens = max_generation_length
 
-            # Ensure that the context does not encroach into the `space`
-            # for the generation.
             token_context = self.tok_encode_batch(context)
-            input_ids = token_context["input_ids"][
-                :, self.max_gen_toks - self.max_length :
-            ].to(self.device)
-            attention_mask = token_context["attention_mask"][
-                :, self.max_gen_toks - self.max_length :
-            ].to(self.device)
 
             responses = self._model_generate(
-                inputs={"input_ids": input_ids, "attention_mask": attention_mask},
+                inputs=token_context,
                 max_tokens=max_tokens,
                 stop=until,
             )
             responses = self.tok_decode(responses.tolist())
 
             for response in responses:
+                # Ensure the generated responses do not contain the stop sequences.
                 for term in until:
                     response = response.split(term)[0]
                 # partial caching
@@ -325,11 +388,27 @@ class AutoCausalLM(HuggingFaceAutoLM):
         return self.model(inputs)["logits"]
 
     def _model_generate(
-        self, inputs: TokenSequence, max_tokens: int, stop: Optional[List[str]] = None
+        self,
+        inputs: transformers.BatchEncoding,
+        max_tokens: int,
+        stop: Optional[List[str]] = None,
     ) -> TokenSequence:
-        stopping_criteria = stop_sequences_criteria(self.tokenizer, stop)
+        # Ensure that the context does not encroach into the `space`
+        # for the generation.
+        input_ids = inputs["input_ids"][:, self.max_gen_toks - self.max_length :]
+        attention_mask = inputs["attention_mask"][
+            :, self.max_gen_toks - self.max_length :
+        ]
+        input_ids = input_ids.to(self.device)
+        attention_mask = attention_mask.to(self.device)
+
+        stopping_criteria = stop_sequences_criteria(
+            self.tokenizer, stop, input_ids.shape[1], input_ids.shape[0]
+        )
+
         generations = self.model.generate(
-            **inputs,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
             # GPT style models require the `generate` `max_length` arg to include the
             # context length, so we instead set `max_new_tokens` which is the number
             # of new tokens to generate, excluding the current number of tokens.
@@ -365,18 +444,23 @@ class AutoSeq2SeqLM(HuggingFaceAutoLM):
         new_requests = []
         for chunk in utils.chunks(requests, self.batch_size):
             context, continuation = zip(*chunk)
+
             # Fill empty contexts with the EOT token.
             context = [
                 f"{self.eot_token}" if len(text) == 0 else text for text in context
             ]
             context_enc = self.tok_encode_batch(context)
             for key in context_enc:
-                context_enc[key] = context_enc[key][:, -(self.max_length - 1) :]
+                context_enc[key] = context_enc[key][:, -self.max_length :]
+
+            # Remove leading whitespace introduced by the default
+            # `text_target_separator` since the context and continuation
+            # will not be concatenated as a single (decoder) input.
+            continuation = [text.lstrip() for text in continuation]
             continuation_enc = self.tok_encode_batch(list(continuation))
             for key in continuation_enc:
-                continuation_enc[key] = continuation_enc[key][
-                    :, -(self.max_length - 1) :
-                ]
+                continuation_enc[key] = continuation_enc[key][:, -self.max_length :]
+
             new_requests.append(
                 ((context, continuation), context_enc, continuation_enc)
             )
@@ -472,12 +556,32 @@ class AutoSeq2SeqLM(HuggingFaceAutoLM):
         return self.model(**inputs, labels=labels["input_ids"])
 
     def _model_generate(
-        self, inputs: TokenSequence, max_tokens: int, stop: Optional[List[str]] = None
-    ) -> Union[TokenSequence, List[str]]:
-        stopping_criteria = stop_sequences_criteria(self.tokenizer, stop)
+        self,
+        inputs: transformers.BatchEncoding,
+        max_tokens: int,
+        stop: Optional[List[str]] = None,
+    ) -> TokenSequence:
+        input_ids = inputs["input_ids"][:, -self.max_length :].to(self.device)
+        attention_mask = inputs["attention_mask"][:, -self.max_length :].to(self.device)
+
+        # Generate one token to calculate the number of start tokens prepended to decoder_input_ids
+        # (leaving this here in case the below assumption is violated in the future)
+        # one_tok_gen = self.model.generate(
+        #    input_ids=torch.zeros((1, 1), dtype=torch.int),
+        #    min_length=2,
+        #    max_new_tokens=1,
+        # ).squeeze()
+        # initial_decoder_input_length = len(one_tok_gen) - 1
+
+        # Assume that there will always only be one token in the decoder inputs, assumption holds for existing HF models
+        stopping_criteria = stop_sequences_criteria(
+            self.tokenizer, stop, 1, input_ids.shape[0]
+        )
+
         generations = self.model.generate(
-            **inputs,
-            max_length=max_tokens,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            max_new_tokens=max_tokens,
             stopping_criteria=stopping_criteria,
             do_sample=False,
         )
@@ -487,28 +591,46 @@ class AutoSeq2SeqLM(HuggingFaceAutoLM):
 class MultiTokenEOSCriteria(transformers.StoppingCriteria):
     """Criteria to stop on the specified multi-token sequence."""
 
-    def __init__(self, sequence: str, tokenizer: transformers.PreTrainedTokenizer):
+    def __init__(
+        self,
+        sequence: str,
+        tokenizer: transformers.PreTrainedTokenizer,
+        initial_decoder_input_length: int,
+        batch_size: int,
+    ):
+        self.initial_decoder_input_length = initial_decoder_input_length
+        self.done_tracker = [False] * batch_size
         self.sequence = sequence
-        self.sequence_id = tokenizer.encode(sequence)
-        self.sequence_id_len = len(self.sequence_id) + 1
+        self.sequence_ids = tokenizer.encode(sequence, add_special_tokens=False)
+        self.sequence_id_len = len(self.sequence_ids)
         self.tokenizer = tokenizer
 
-    def __call__(
-        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs
-    ) -> bool:
-        last_token_id = input_ids[0, -self.sequence_id_len :]
-        last_tokens = self.tokenizer.decode(last_token_id)
-        is_stopped = self.sequence in last_tokens
-        return is_stopped
+    def __call__(self, input_ids, scores, **kwargs) -> bool:
+        # For efficiency, we compare the last n tokens where n is the number of tokens in the stop_sequence
+        lookback_ids_batch = input_ids[:, self.initial_decoder_input_length :][
+            :, -self.sequence_id_len :
+        ]
+
+        lookback_tokens_batch = self.tokenizer.batch_decode(lookback_ids_batch)
+
+        for i, done in enumerate(self.done_tracker):
+            if not done:
+                self.done_tracker[i] = self.sequence in lookback_tokens_batch[i]
+        return False not in self.done_tracker
 
 
 def stop_sequences_criteria(
-    tokenizer: transformers.PreTrainedTokenizer, stop_sequences: List[str]
+    tokenizer: transformers.PreTrainedTokenizer,
+    stop_sequences: List[str],
+    initial_decoder_input_length: int,
+    batch_size: int,
 ) -> transformers.StoppingCriteriaList:
     return transformers.StoppingCriteriaList(
         [
             *[
-                MultiTokenEOSCriteria(sequence, tokenizer)
+                MultiTokenEOSCriteria(
+                    sequence, tokenizer, initial_decoder_input_length, batch_size
+                )
                 for sequence in stop_sequences
             ],
         ]

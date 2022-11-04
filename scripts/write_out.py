@@ -1,6 +1,6 @@
 import argparse
-import numpy as np
 import os
+import numpy as np
 
 import lm_eval
 from lm_eval.api import utils
@@ -16,8 +16,8 @@ def parse_args():
     parser.add_argument("--template_names", default="all_templates")
     parser.add_argument("--sets", type=str, default="val")  # example: val,test
     parser.add_argument("--num_fewshot", type=int, default=1)
-    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--num_examples", type=int, default=1)
+    parser.add_argument("--seed", type=int, default=utils.DEFAULT_SEED)
     return parser.parse_args()
 
 
