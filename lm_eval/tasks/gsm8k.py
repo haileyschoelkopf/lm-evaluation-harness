@@ -19,7 +19,7 @@ Homepage: https://github.com/openai/grade-school-math
 import inspect
 import re
 from pathlib import Path
-from lm_eval.api.task import PromptSourceTask
+from lm_eval.api.task import PromptSourceTask, ChainOfThoughtPromptingTask
 from lm_eval.api.request import rf
 from lm_eval.api.metric import mean
 
@@ -133,3 +133,8 @@ class GradeSchoolMath8K(PromptSourceTask):
 
     def max_generation_length(self):
         return 192
+
+
+class GradeSchoolMath8KCoT(ChainOfThoughtPromptingTask):
+    # Still WIP
+    pass

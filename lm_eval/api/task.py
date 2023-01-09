@@ -785,3 +785,31 @@ class PerplexityTask(PromptSourceTask):
         return {
             "prompt_name": None,
         }
+
+
+def ChainOfThoughtPromptingTask(PromptSourceTask):
+
+    @abstractmethod
+    def has_chain_of_thought_docs(self):
+        """Whether the task has a chain-of-thought set"""
+        return True
+
+    def chain_of_thought_docs(self) -> datasets.Dataset:
+        """
+        Returns:
+            A dataset of training documents.
+        """
+        return datasets.Dataset.from_dict({
+            0: "Sample 0",
+            1: "Sample 1",
+            2: "Sample 2",
+            3: "Sample 3",
+            })
+
+    def fewshot_docs(self) -> datasets.Dataset:
+        """Returns the `dataset` split that the few-shot examples should be sample
+        from. This prioritizes the `train_docs` split as the few-shot example
+        source, then `validation_docs`, and lastly `test_docs`.
+        """
+        if self.has_chain_of_thought_docs():
+            return self.chain_of_thought_docs()
