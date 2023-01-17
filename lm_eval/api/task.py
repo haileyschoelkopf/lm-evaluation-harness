@@ -797,14 +797,9 @@ def ChainOfThoughtPromptingTask(PromptSourceTask):
     def chain_of_thought_docs(self) -> datasets.Dataset:
         """
         Returns:
-            A dataset of training documents.
+            A subset of samples with chain-of-thought examples..
         """
-        return datasets.Dataset.from_dict({
-            0: "Sample 0",
-            1: "Sample 1",
-            2: "Sample 2",
-            3: "Sample 3",
-            })
+        raise NotImplementedError("Needs a set of examples")
 
     def fewshot_docs(self) -> datasets.Dataset:
         """Returns the `dataset` split that the few-shot examples should be sample
