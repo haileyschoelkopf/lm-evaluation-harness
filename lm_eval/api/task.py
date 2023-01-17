@@ -787,9 +787,8 @@ class PerplexityTask(PromptSourceTask):
         }
 
 
-def ChainOfThoughtPromptingTask(PromptSourceTask):
+class ChainOfThoughtPromptingTask(PromptSourceTask):
 
-    @abstractmethod
     def has_chain_of_thought_docs(self):
         """Whether the task has a chain-of-thought set"""
         return True
@@ -808,3 +807,20 @@ def ChainOfThoughtPromptingTask(PromptSourceTask):
         """
         if self.has_chain_of_thought_docs():
             return self.chain_of_thought_docs()
+
+    def doc_to_text(self, doc: dict) -> str:
+        if "cot" in doc:
+            text = doc['cot']
+        else:
+            text, _ = self.prompt_template.apply(doc)
+        
+        return text
+
+    def doc_to_target(self, doc: dict) -> str:
+        if "cot" in doc:
+            text = " "
+        else:
+            text, _ = self.prompt_template.apply(doc)
+        
+        return text
+        

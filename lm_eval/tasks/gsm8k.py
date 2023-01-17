@@ -138,18 +138,109 @@ class GradeSchoolMath8K(PromptSourceTask):
 
 class GradeSchoolMath8KCoT(ChainOfThoughtPromptingTask):
 
-    def chain_of_thought_docs(self) -> datasets.Dataset:
+    VERSION = 0
+    DATASET_PATH = "gsm8k"
+    DATASET_NAME = "main"
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        self.ANS_RE = re.compile(r"#### (\-?[0-9\.\,]+)")
+        self.CoT_RE = re.compile(r"The answer is (\-?[0-9\.\,]+)")
+        self.COMPLETION_RE = self.CoT_RE
+            
+    def has_training_docs(self):
+        return True
+
+    def has_validation_docs(self):
+        return False
+
+    def has_test_docs(self):
+        return True
+
+    def training_docs(self):
+        if self.has_training_docs():
+            return self.dataset["train"]
+
+    def validation_docs(self):
+        raise NotImplementedError
+
+    def test_docs(self):
+        if self.has_test_docs():
+            return self.dataset["test"]
+
+    def _extract_answer(self, completion, RE):
+        match = RE.search(completion)
+        if match:
+            match_str = match.group(1).strip()
+            match_str = match_str.replace(",", "")
+            if match_str.endswith("."): # strip trailing '.' if needed
+                match_str = match_str[:-1]
+            return match_str
+        else:
+            return INVALID_ANS
+
+    def _is_correct(self, completion, answer):
+        gold = self._extract_answer(answer, self.ANS_RE)
+        assert gold != INVALID_ANS, "No ground truth answer found in the document."
+        return self._extract_answer(completion, self.COMPLETION_RE) == gold
+
+    def compute_scores(self, doc, results):
+        """Take a single document and the LM results and evaluates, returning a
+        dict where keys are the names of submetrics and values are the values of
+        the metric for that one document
+
+        :param doc:
+            The document as returned from training_docs, validation_docs, or test_docs.
+        :param results:
+            The results of the requests created in construct_requests.
+        """
+        completion = results[0]
+
+        return {"acc": self._is_correct(completion, doc)}
+
+    def process_results(self, doc, results):
+        targets = self.doc_to_target(doc)
+        out = self.compute_scores(targets, results)
+
+        if self.save_examples:
+            example = {"target": targets, "pred": results[0], "pred_answer": self._extract_answer(results[0], self.COMPLETION_RE)}
+            return out, example
+        return out
+
+    def aggregation(self):
+        """
+        :returns: {str: [float] -> float}
+            A dictionary where keys are the names of submetrics and values are
+            functions that aggregate a list of metrics
+        """
+        return {"acc": mean}
+
+    def higher_is_better(self):
+        """
+        :returns: {str: bool}
+            A dictionary where keys are the names of submetrics and values are
+            whether a higher value of the submetric is better
+        """
+        return {"acc": True}
+
+    def max_generation_length(self):
+        return 192
+
+    def chain_of_thought_docs(self):
         """
         Returns:
             A dataset of training documents.
         """
         return datasets.Dataset.from_dict({
-            0: "Q: There are 15 trees in the grove. Grove workers will plant trees in the grove today. After they are done, there will be 21 trees. How many trees did the grove workers plant today?\n\nA: There are 15 trees originally. Then there were 21 trees after some more were planted. So there must have been 21 - 15 = 6. The answer is 6.",
-            1: "Q: If there are 3 cars in the parking lot and 2 more cars arrive, how many cars are in the parking lot?\n\nA: There are originally 3 cars. 2 more cars arrive. 3 + 2 = 5. The answer is 5.",
-            2: "Q: Leah had 32 chocolates and her sister had 42. If they ate 35, how many pieces do they have left in total?\n\nA: Originally, Leah had 32 chocolates. Her sister had 42. So in total they had 32 + 42 = 74. After eating 35, they had 74 - 35 = 39. The answer is 39.",
-            3: "Q: Jason had 20 lollipops. He gave Denny some lollipops. Now Jason has 12 lollipops. How many lollipops did Jason give to Denny?\n\nA: Jason started with 20 lollipops. Then he had 12 after giving some to Denny. So he gave Denny 20 - 12 = 8. The answer is 8.",
-            4: "Q: Shawn has five toys. For Christmas, he got two toys each from his mom and dad. How many toys does he have now?\n\nA: Shawn started with 5 toys. If he got 2 toys each from his mom and dad, then that is 4 more toys. 5 + 4 = 9. The answer is 9.",
-            5: "Q: There were nine computers in the server room. Five more computers were installed each day, from monday to thursday. How many computers are now in the server room?\n\nA: There were originally 9 computers. For each of 4 days, 5 more computers were added. So 5 * 4 = 20 computers were added. 9 + 20 is 29. The answer is 29.",
-            6: "Q: Michael had 58 golf balls. On tuesday, he lost 23 golf balls. On wednesday, he lost 2 more. How many golf balls did he have at the end of wednesday?\n\nA: Michael started with 58 golf balls. After losing 23 on tuesday, he had 58 - 23 = 35. After losing 2 more, he had 35 - 2 = 33 golf balls. The answer is 33.",
-            7: "Q: Olivia has $23. She bought five bagels for $3 each. How much money does she have left?\n\nA: Olivia had 23 dollars. 5 bagels for 3 dollars each will be 5 x 3 = 15 dollars. So she has 23 - 15 dollars left. 23 - 15 is 8. The answer is 8."
+            "cot": [
+                "Q: There are 15 trees in the grove. Grove workers will plant trees in the grove today. After they are done, there will be 21 trees. How many trees did the grove workers plant today?\n\nA: There are 15 trees originally. Then there were 21 trees after some more were planted. So there must have been 21 - 15 = 6. The answer is 6.",
+                "Q: If there are 3 cars in the parking lot and 2 more cars arrive, how many cars are in the parking lot?\n\nA: There are originally 3 cars. 2 more cars arrive. 3 + 2 = 5. The answer is 5.",
+                "Q: Leah had 32 chocolates and her sister had 42. If they ate 35, how many pieces do they have left in total?\n\nA: Originally, Leah had 32 chocolates. Her sister had 42. So in total they had 32 + 42 = 74. After eating 35, they had 74 - 35 = 39. The answer is 39.",
+                "Q: Jason had 20 lollipops. He gave Denny some lollipops. Now Jason has 12 lollipops. How many lollipops did Jason give to Denny?\n\nA: Jason started with 20 lollipops. Then he had 12 after giving some to Denny. So he gave Denny 20 - 12 = 8. The answer is 8.",
+                "Q: Shawn has five toys. For Christmas, he got two toys each from his mom and dad. How many toys does he have now?\n\nA: Shawn started with 5 toys. If he got 2 toys each from his mom and dad, then that is 4 more toys. 5 + 4 = 9. The answer is 9.",
+                "Q: There were nine computers in the server room. Five more computers were installed each day, from monday to thursday. How many computers are now in the server room?\n\nA: There were originally 9 computers. For each of 4 days, 5 more computers were added. So 5 * 4 = 20 computers were added. 9 + 20 is 29. The answer is 29.",
+                "Q: Michael had 58 golf balls. On tuesday, he lost 23 golf balls. On wednesday, he lost 2 more. How many golf balls did he have at the end of wednesday?\n\nA: Michael started with 58 golf balls. After losing 23 on tuesday, he had 58 - 23 = 35. After losing 2 more, he had 35 - 2 = 33 golf balls. The answer is 33.",
+                "Q: Olivia has $23. She bought five bagels for $3 each. How much money does she have left?\n\nA: Olivia had 23 dollars. 5 bagels for 3 dollars each will be 5 x 3 = 15 dollars. So she has 23 - 15 dollars left. 23 - 15 is 8. The answer is 8.",
+            ]
         })
