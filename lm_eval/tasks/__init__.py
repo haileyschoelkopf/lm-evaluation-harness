@@ -90,6 +90,7 @@ TASK_REGISTRY = {
     "gem_xsum_challenge_test_covid": gem_xsum.GEMXSUMChallgeTestCovid,
     # gsm8k
     "gsm8k": gsm8k.GradeSchoolMath8K,
+    "gsm8k_cot": gsm8k.GradeSchoolMath8KCoT,
     # LAMA
     "lama-trex": lama.Trex,
     "lama-squad": lama.Squad,
